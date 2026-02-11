@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Clock, Play, AlertTriangle, X, Layers, RotateCcw, Box, Flame, CheckCircle, Upload } from 'lucide-react';
+import { Clock, Play, AlertTriangle, X, Layers, RotateCcw, Box, Flame, CheckCircle, Upload, Pencil, Trash2 } from 'lucide-react';
 
 interface BakeryItem {
   id: number;
@@ -10,6 +10,7 @@ interface BakeryItem {
   totalTime: number;
   steam: boolean;
   special?: string;
+  ovenGroup?: string;
   note?: string;
   elapsedTime?: number;
   isOvertime?: boolean;
@@ -36,29 +37,100 @@ interface CustomFormState {
   oven: string;
 }
 
+const OVENS = [
+  { name: 'Steam Oven 1', capacity: 4 },
+  { name: 'Steam Oven 2', capacity: 4 },
+  { name: 'Steam Oven 3', capacity: 4 },
+  { name: 'Steam Oven 4', capacity: 4 },
+  { name: 'No Steam Oven 5', capacity: 3 },
+  { name: 'No Steam Oven 6', capacity: 3 },
+  { name: 'No Steam Oven 7', capacity: 3 },
+  { name: 'Convection Oven 8', capacity: 6 },
+];
+
+const PRESET_ITEMS_CSV = `Sausage Buns,10,200C/220C,8,Steam Oven 1-4,No
+Corn/Scallion Bun,12,200C/210C,10,Steam Oven 1-4,No
+Pork Floss Bun,8,175C/210C,12,Steam Oven 1-4,No
+Milk Bun,15,175C/210C,15,Steam Oven 1-4,No
+Green Tea Red Bean,10,175C/210C,15,Steam Oven 1-4,No
+Honey Cheese Stick,12,210C/200C,12,Steam Oven 1-4,No
+Ham & Cheese Bun,10,210C/200C,12,Steam Oven 1-4,No
+Red Bean Bun,10,200C/190C,10,Steam Oven 1-4,No
+Taro Bun,10,200C/210C,10,Steam Oven 1-4,No
+Coffee Pineapple Bun,8,200C/210C,11,Steam Oven 1-4,No
+Original Pineapple Bun,10,200C/210C,11,Steam Oven 1-4,No
+Chocolate Pineapple Bun,8,200C/210C,12,Steam Oven 1-4,No
+Mango Pineapple Bun,8,200C/210C,12,Steam Oven 1-4,No
+Lava Pineapple Bun,6,200C/210C,16,Steam Oven 1-4,No
+Bacon & Cheese,12,200C/210C,12,Steam Oven 1-4,Yes
+Mushroom Sausage Bun,12,200C/210C,14,Steam Oven 1-4,Yes
+Hazelnut Chocolate,10,190C/210C,8,Steam Oven 1-4,Yes
+Black Eye Pea,15,190C/210C,8,Steam Oven 1-4,Yes
+Mango Cheese,10,190C/210C,12,Steam Oven 1-4,Yes
+Pumpkin Bun,10,190C/210C,12,Steam Oven 1-4,Yes
+Original Loaf,5,140C/250C,33,No Steam Oven 5-7,No
+Pumpkin Loaf,5,150C/230C,33,No Steam Oven 5-7,No
+Whole Wheat Loaf,5,150C/230C,35,No Steam Oven 5-7,No
+Biscoff Danish,8,160C,17,Convection Oven 8,Yes
+Pistachio Croissant,8,175C,20,Convection Oven 8,No
+Danish Toast,4,150C,43,Convection Oven 8,No
+Layered Toast,6,150C,32,Convection Oven 8,No
+Q-Heart Mochi,12,160C,50,Convection Oven 8,Yes
+Large Croissant,16,160C,17,Convection Oven 8,Yes
+Baguette,6,165C,11,Convection Oven 8,Yes`;
+
+const getPresetQueue = (): BakeryItem[] => PRESET_ITEMS_CSV.split('\n').map((line, index) => {
+  const [product, quantity, temp, time, ovenGroupCSV, steam] = line.split(',');
+  
+  let groupName = '';
+  const ovenGroupName = ovenGroupCSV.trim();
+
+  if (ovenGroupName === 'Steam Oven 1-4') {
+    groupName = 'Group A';
+  } else if (ovenGroupName === 'No Steam Oven 5-7') {
+    groupName = 'Group B';
+  } else if (ovenGroupName === 'Convection Oven 8') {
+    groupName = 'Group C';
+  }
+
+  return {
+    id: Date.now() + index,
+    product: product.trim(),
+    quantity: parseInt(quantity, 10),
+    temp: temp.trim(),
+    totalTime: parseFloat(time),
+    oven: groupName, // Display 'Group A', 'Group B', etc. in the queue card
+    ovenGroup: groupName, // Use 'Group A', 'Group B', etc. for logic
+    steam: steam.trim().toLowerCase() === 'yes',
+  };
+});
+
+const PRESET_DATA: ItemsState = {
+  queue: getPresetQueue(),
+  baking: [],
+  completed: [],
+};
+
 const App = () => {
   // --- 狀態管理 ---
   const [activeTab, setActiveTab] = useState<keyof ItemsState>('queue');
-  const [items, setItems] = useState<ItemsState>({ queue: [], baking: [], completed: [] });
+  const [items, setItems] = useState<ItemsState>(() => PRESET_DATA);
   
   // Modals
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showRecoverModal, setShowRecoverModal] = useState(false);
+  const [showEditMasterModal, setShowEditMasterModal] = useState(false);
   
   // Form States
-  const [selectedOven, setSelectedOven] = useState('');
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
-  const [quantity, setQuantity] = useState(1);
   const [customForm, setCustomForm] = useState<CustomFormState>({ product: '', topTemp: '', bottomTemp: '', time: '', steam: false, special: '', oven: '' });
   const [bulkSelection, setBulkSelection] = useState<number[]>([]);
-  const [dynamicBakingData, setDynamicBakingData] = useState<any | null>(null);
+  const [editableQueue, setEditableQueue] = useState<BakeryItem[]>([]);
   const [overtimeAlertItem, setOvertimeAlertItem] = useState<BakeryItem | null>(null);
-  
-  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString([], { hour12: false }));
 
   // Pre-load audio to be ready for playback
+  const [currentTime, setCurrentTime] = useState(new Date());
   const notificationSound = useRef(new Audio('/notification.mp3')); // Ensure notification.mp3 is in the /public folder
   const audioUnlocked = useRef(false);
 
@@ -73,51 +145,34 @@ const App = () => {
     });
   };
 
-  // --- 完整烘焙數據 ---
-  const bakingData: any = {
-    'Oven 1': { name: 'Oven 1', priority: 1, products: { 'Sausage Buns': { temp: '220°C/220°C', time: 8, steam: false, priority: 1 }, 'Pork Floss Buns': { temp: '190°C/235°C', time: 8, steam: false, priority: 2 }, 'Coffee Polo Buns': { temp: '195°C/235°C', time: 11, steam: false, priority: 3 }, 'Original Polo Buns': { temp: '200°C/210°C', time: 11, steam: false, priority: 4 }, 'Lava Polo Buns': { temp: '200°C/210°C', time: 16, steam: false, priority: 5 } }},
-    'Oven 2': { name: 'Oven 2', priority: 2, products: { 'Cheese Bacon': { temp: '200°C/210°C', time: 12, steam: true, priority: 1 }, 'Mushroom Sausage': { temp: '200°C/210°C', time: 14, steam: true, priority: 2 }, 'Nutty Streusel': { temp: '190°C/200°C', time: 14, steam: true, priority: 3 } }},
-    'Oven 3': { name: 'Oven 3', priority: 3, products: { 'Mango Crown Cheese & Mini Pumpkin': { temp: '190°C/210°C', time: 8, steam: true, priority: 1 }, 'Country Grain Honey Fig': { temp: '195°C/210°C', time: 17, steam: true, priority: 2 } }},
-    'Oven 4': { name: 'Oven 4', priority: 4, products: { 'Milk Toffee': { temp: '180°C/250°C', time: 11, steam: false, priority: 1 }, 'Original Loaf': { temp: '140°C/250°C', time: 33, steam: false, priority: 2 } }},
-    'Oven 5': { name: 'Oven 5', priority: 5, products: { 'Custom Item': { temp: '180°C', time: 15, steam: false, priority: 1 } }},
-    'Oven 6': { name: 'Oven 6', priority: 6, products: { 'Custom Item': { temp: '180°C', time: 15, steam: false, priority: 1 } }}
-  };
-
-  const dataToUse = dynamicBakingData || bakingData;
-
   // --- 初始化與持久化 ---
   useEffect(() => {
-    // 1. Load dynamic data from CSV in localStorage
-    const savedCsvData = localStorage.getItem('bakeryCsvData');
-    if (savedCsvData) {
-      try {
-        setDynamicBakingData(JSON.parse(savedCsvData));
-      } catch (e) {
-        console.error("Failed to parse CSV data from localStorage", e);
-        localStorage.removeItem('bakeryCsvData');
-      }
-    }
-
-    // 2. Load item states
-    const savedItems = localStorage.getItem('bakeryData');
+    // Load item states from localStorage
+    const savedItems = localStorage.getItem('tsuki-bakery-data');
     if (savedItems) {
       try {
         setItems(JSON.parse(savedItems));
       } catch (e) {
         console.error("Failed to parse item data from localStorage", e);
-        localStorage.removeItem('bakeryData');
+        // If parsing fails, start with preset
+        setItems(PRESET_DATA);
+        localStorage.setItem('tsuki-bakery-data', JSON.stringify(PRESET_DATA));
       }
+    } else {
+      // First time load, use preset data and save it
+      setItems(() => PRESET_DATA);
+      localStorage.setItem('tsuki-bakery-data', JSON.stringify(PRESET_DATA));
     }
 
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
-    const timeInterval = setInterval(() => setCurrentTime(new Date().toLocaleTimeString([], { hour12: false })), 1000);
+    const timeInterval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timeInterval);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('bakeryData', JSON.stringify(items));
+    localStorage.setItem('tsuki-bakery-data', JSON.stringify(items));
   }, [items]);
 
   // --- 計時器邏輯 ---
@@ -186,34 +241,18 @@ const App = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const formatFullDateTime = (date: Date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    return `${year}/${month}/${day} - ${timeString}`;
+  };
+
   // --- 核心操作函數 ---
   const addToQueue = (itemData: Omit<BakeryItem, 'id' | 'addedTime'>) => {
     const newItem = { ...itemData, id: Date.now() + Math.random(), addedTime: new Date().toLocaleTimeString() };
     setItems(prev => ({ ...prev, queue: [...prev.queue, newItem] }));
-  };
-
-  const handleAddMultiple = () => {
-    if (!selectedOven || selectedProducts.length === 0) return;
-
-    const newItems = selectedProducts.map((productName, index) => {
-      const p = dataToUse[selectedOven].products[productName];
-      return {
-        id: Date.now() + Math.random() + index,
-        oven: selectedOven,
-        product: productName,
-        quantity,
-        temp: p.temp,
-        totalTime: p.time,
-        steam: p.steam,
-        special: p.special,
-        addedTime: new Date().toLocaleTimeString()
-      };
-    });
-
-    setItems(prev => ({ ...prev, queue: [...prev.queue, ...newItems] }));
-
-    setShowAddModal(false);
-    setSelectedOven(''); setSelectedProducts([]); setQuantity(1);
   };
 
   const handleAddCustom = () => {
@@ -232,32 +271,131 @@ const App = () => {
     setShowCustomModal(false);
   };
 
+  const handleReset = () => {
+    setItems(prev => {
+      const itemsToMove = [...prev.baking, ...prev.completed].map(item => {
+        const { elapsedTime, startTime, completedTime, isOvertime, severeWarningAck, ...rest } = item;
+        return rest;
+      });
+      return {
+        queue: [...prev.queue, ...itemsToMove],
+        baking: [],
+        completed: []
+      };
+    });
+    setShowResetModal(false);
+  };
+
+  const handleRecover = () => {
+    localStorage.removeItem('tsuki-bakery-data');
+    setItems({ queue: getPresetQueue(), baking: [], completed: [] });
+    setShowRecoverModal(false);
+  };
+
   const startBaking = (id: number) => {
     const item = items.queue.find(i => i.id === id);
-    if (item) {
-      const currentOvenCount = items.baking.filter(i => i.oven === item.oven).length;
-      if (currentOvenCount >= 4) {
-        alert('OVEN FULL');
-        return;
-      }
+    if (!item) return;
 
+    const { ovenGroup } = item;
+    let targetOvens: string[] = [];
+
+    if (ovenGroup === 'Group A') {
+      targetOvens = ['Steam Oven 1', 'Steam Oven 2', 'Steam Oven 3', 'Steam Oven 4'];
+    } else if (ovenGroup === 'Group B') {
+      targetOvens = ['No Steam Oven 5', 'No Steam Oven 6', 'No Steam Oven 7'];
+    } else if (ovenGroup === 'Group C') {
+      targetOvens = ['Convection Oven 8'];
+    } else {
+      // Fallback for items without a group (e.g., custom items)
+      targetOvens = [item.oven];
+    }
+
+    let assignedOven: string | null = null;
+
+    for (const ovenName of targetOvens) {
+      const ovenConfig = OVENS.find(o => o.name === ovenName);
+      if (!ovenConfig) continue;
+
+      const currentOvenCount = items.baking.filter(i => i.oven === ovenName).length;
+      if (currentOvenCount < ovenConfig.capacity) {
+        assignedOven = ovenName;
+        break; // Found a spot
+      }
+    }
+
+    if (assignedOven) {
+      const finalOvenName = assignedOven; // for closure
       setItems(prev => ({
         ...prev,
         queue: prev.queue.filter(i => i.id !== id),
-        baking: [...prev.baking, { ...item, elapsedTime: 0, isOvertime: false, startTime: new Date().toLocaleTimeString() }]
+        baking: [...prev.baking, { ...item, oven: finalOvenName, elapsedTime: 0, isOvertime: false, startTime: new Date().toLocaleTimeString() }]
       }));
+    } else {
+      alert(`All ovens in ${ovenGroup || 'the target group'} are full!`);
     }
   };
 
   const startBulk = () => {
     const selectedItems = items.queue.filter(i => bulkSelection.includes(i.id));
-    setItems(prev => ({
-      ...prev,
-      queue: prev.queue.filter(i => !bulkSelection.includes(i.id)),
-      baking: [...prev.baking, ...selectedItems.map(i => ({ ...i, elapsedTime: 0, isOvertime: false, startTime: new Date().toLocaleTimeString() }))]
-    }));
-    setBulkSelection([]);
-    setShowBulkModal(false);
+    const currentBaking = [...items.baking];
+    const assignments: { item: BakeryItem, assignedOven: string }[] = [];
+    let possible = true;
+
+    for (const item of selectedItems) {
+      const { ovenGroup } = item;
+      let targetOvens: string[] = [];
+
+      if (ovenGroup === 'Group A') {
+        targetOvens = ['Steam Oven 1', 'Steam Oven 2', 'Steam Oven 3', 'Steam Oven 4'];
+      } else if (ovenGroup === 'Group B') {
+        targetOvens = ['No Steam Oven 5', 'No Steam Oven 6', 'No Steam Oven 7'];
+      } else if (ovenGroup === 'Group C') {
+        targetOvens = ['Convection Oven 8'];
+      } else {
+        targetOvens = [item.oven];
+      }
+
+      let foundSpot = false;
+      for (const ovenName of targetOvens) {
+        const ovenConfig = OVENS.find(o => o.name === ovenName);
+        if (!ovenConfig) continue;
+
+        // Check capacity against current + planned items
+        const futureOvenCount = currentBaking.filter(i => i.oven === ovenName).length;
+        if (futureOvenCount < ovenConfig.capacity) {
+          assignments.push({ item, assignedOven: ovenName });
+          // Add a placeholder to currentBaking to reserve the spot for the next iteration
+          currentBaking.push({ ...item, oven: ovenName });
+          foundSpot = true;
+          break;
+        }
+      }
+
+      if (!foundSpot) {
+        alert(`Cannot start bulk baking. No available oven found for ${item.product} in ${item.ovenGroup}.`);
+        possible = false;
+        break;
+      }
+    }
+
+    if (possible) {
+      setItems(prev => {
+        const newBakingItems = assignments.map(({ item, assignedOven }) => ({
+          ...item,
+          oven: assignedOven,
+          elapsedTime: 0,
+          isOvertime: false,
+          startTime: new Date().toLocaleTimeString()
+        }));
+        return {
+          ...prev,
+          queue: prev.queue.filter(i => !bulkSelection.includes(i.id)),
+          baking: [...prev.baking, ...newBakingItems]
+        };
+      });
+      setBulkSelection([]);
+      setShowBulkModal(false);
+    }
   };
 
   const toggleBulkSelection = (id: number) => {
@@ -265,41 +403,40 @@ const App = () => {
   };
 
   // --- CSV 導入邏輯 ---
-  const parseCsvToBakingData = (csvText: string) => {
-    const newBakingData: any = {};
+  const parseCsvToQueue = (csvText: string): BakeryItem[] => {
+    const newQueue: BakeryItem[] = [];
     const rows = csvText.trim().split('\n');
-    // Skip header row if it exists by checking for a specific header name
-    const startIndex = rows[0].includes('烤箱名稱') ? 1 : 0;
+    // Skip header row if it exists by checking for 'product'
+    const startIndex = rows[0].toLowerCase().includes('product') ? 1 : 0;
 
     for (let i = startIndex; i < rows.length; i++) {
       const row = rows[i].trim();
       if (!row) continue;
 
       const columns = row.split(',');
-      if (columns.length < 6) continue; // Ensure all required columns are present
+      if (columns.length < 5) continue; // product,quantity,temp,time,oven
 
-      const [ovenName, productName, temp, time, steam, priority, special] = columns.map(c => c.trim());
+      const [product, quantity, temp, time, oven, steam] = columns.map(c => c.trim());
 
-      if (!newBakingData[ovenName]) {
-        newBakingData[ovenName] = {
-          name: ovenName,
-          priority: Object.keys(newBakingData).length + 1, // Assign priority based on order of appearance
-          products: {}
-        };
-      }
-
-      newBakingData[ovenName].products[productName] = {
-        temp: temp,
-        time: parseFloat(time),
-        steam: steam.toLowerCase() === 'true',
-        priority: parseInt(priority, 10) || 99,
-        special: special || ''
-      };
+      newQueue.push({
+        id: Date.now() + Math.random() + i,
+        product: product || 'Unnamed Product',
+        quantity: parseInt(quantity, 10) || 1,
+        temp: temp || '180°C/180°C',
+        totalTime: parseFloat(time) || 10,
+        oven: oven || 'Oven 1',
+        steam: steam?.toLowerCase() === 'true' || false,
+        addedTime: new Date().toLocaleTimeString(),
+        // Ensure other optional fields are not undefined
+        elapsedTime: 0,
+        isOvertime: false,
+        isCustom: false,
+      });
     }
-    if (Object.keys(newBakingData).length === 0) {
-      throw new Error("CSV is empty or in the wrong format.");
+    if (newQueue.length === 0) {
+      throw new Error("CSV is empty or in the wrong format. Expected columns: product,quantity,temp,time,oven,steam");
     }
-    return newBakingData;
+    return newQueue;
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -311,10 +448,14 @@ const App = () => {
       const text = e.target?.result;
       if (typeof text === 'string') {
         try {
-          const parsedData = parseCsvToBakingData(text);
-          setDynamicBakingData(parsedData);
-          localStorage.setItem('bakeryCsvData', JSON.stringify(parsedData));
-          alert('Baking data imported successfully!');
+          const newQueue = parseCsvToQueue(text);
+          // Overwrite queue and save immediately
+          setItems(prev => {
+            const newItemsState = { ...prev, queue: newQueue };
+            localStorage.setItem('tsuki-bakery-data', JSON.stringify(newItemsState));
+            return newItemsState;
+          });
+          alert(`Import successful! ${newQueue.length} items have replaced the queue.`);
         } catch (error) {
           console.error("Error parsing CSV:", error);
           alert(`Failed to parse CSV file. Please check the format.\nError: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -330,9 +471,108 @@ const App = () => {
     fileInputRef.current?.click();
   };
 
+  // --- Edit Master Modal Handlers ---
+  const handleOpenEditMaster = () => {
+    setEditableQueue(JSON.parse(JSON.stringify(items.queue))); // Deep copy to prevent direct mutation
+    setShowEditMasterModal(true);
+  };
+
+  const handleUpdateEditableItem = (id: number, field: keyof BakeryItem, value: any) => {
+    setEditableQueue(currentQueue =>
+      currentQueue.map(item =>
+        item.id === id ? { ...item, [field]: value } : item
+      )
+    );
+  };
+
+  const handleAddEditableItem = () => {
+    const newItem: BakeryItem = {
+      id: Date.now() + Math.random(),
+      product: 'New Product', quantity: 1, temp: '180°C/180°C', totalTime: 10,
+      oven: 'Oven 1', steam: false,
+    };
+    setEditableQueue(currentQueue => [newItem, ...currentQueue]);
+  };
+
+  const handleDeleteEditableItem = (id: number) => {
+    setEditableQueue(currentQueue => currentQueue.filter(item => item.id !== id));
+  };
+
+  const handleSaveMasterEdits = () => {
+    setItems(prev => ({ ...prev, queue: editableQueue }));
+    setShowEditMasterModal(false);
+  };
+
+  const checkOvenCompatibility = (item: BakeryItem, targetOvenName: string): boolean => {
+    const itemOvenGroup = item.ovenGroup;
+
+    // Custom items without a group are compatible with any oven
+    if (!itemOvenGroup) {
+      return true;
+    }
+
+    if (itemOvenGroup === 'Group A') {
+      return ['Steam Oven 1', 'Steam Oven 2', 'Steam Oven 3', 'Steam Oven 4'].includes(targetOvenName);
+    }
+    if (itemOvenGroup === 'Group B') {
+      return ['No Steam Oven 5', 'No Steam Oven 6', 'No Steam Oven 7'].includes(targetOvenName);
+    }
+    if (itemOvenGroup === 'Group C') {
+      return targetOvenName === 'Convection Oven 8';
+    }
+
+    return false; // Default to not compatible if group is unknown
+  };
+
+  const handleDropOnOven = (itemJSON: string, targetOvenName: string) => {
+    const item: BakeryItem = JSON.parse(itemJSON);
+
+    // 1. Compatibility Check
+    if (!checkOvenCompatibility(item, targetOvenName)) {
+      alert('Wrong Oven Type for this Product!');
+      return;
+    }
+
+    // 2. Capacity Check
+    const ovenConfig = OVENS.find(o => o.name === targetOvenName);
+    const ovenCapacity = ovenConfig ? ovenConfig.capacity : 4;
+    const currentOvenCount = items.baking.filter(i => i.oven === targetOvenName).length;
+    if (currentOvenCount >= ovenCapacity) {
+      alert(`OVEN ${targetOvenName} IS FULL (Max ${ovenCapacity} trays)`);
+      return;
+    }
+
+    // 3. Move item from queue to baking
+    setItems(prev => {
+      // Ensure item exists in queue before moving
+      if (!prev.queue.some(qItem => qItem.id === item.id)) return prev;
+
+      return {
+        ...prev,
+        queue: prev.queue.filter(i => i.id !== item.id),
+        baking: [...prev.baking, {
+          ...item,
+          oven: targetOvenName, // Assign to the specific dropped-on oven
+          elapsedTime: 0,
+          isOvertime: false,
+          startTime: new Date().toLocaleTimeString()
+        }]
+      };
+    });
+  };
+
   // --- 渲染組件 ---
   const renderItemCard = (item: BakeryItem, category: keyof ItemsState) => (
-    <div key={item.id} className={`bg-white rounded-2xl p-4 mb-3 shadow-sm border ${item.isOvertime ? 'border-red-500 animate-pulse' : 'border-slate-100'}`}>
+    <div 
+      key={item.id} 
+      draggable={category === 'queue' && !showBulkModal}
+      onDragStart={(e) => {
+        if (category === 'queue') {
+          e.dataTransfer.setData('application/json', JSON.stringify(item));
+          e.dataTransfer.effectAllowed = 'move';
+        }
+      }}
+      className={`bg-white rounded-2xl p-4 mb-3 shadow-sm border ${item.isOvertime ? 'border-red-500 animate-pulse' : 'border-slate-100'} ${category === 'queue' && !showBulkModal ? 'cursor-grab' : ''}`}>
       <div className="flex justify-between items-start">
         <div className="flex gap-3 items-center flex-1">
           {category === 'queue' && showBulkModal && (
@@ -412,173 +652,198 @@ const App = () => {
     </div>
   );
 
+  const totalItems = items.queue.length + items.baking.length + items.completed.length;
+  const progressPercentage = totalItems > 0 ? (items.completed.length / totalItems) * 100 : 0;
+
   return (
-    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
-      <header className="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-30 flex justify-between items-center">
-        <h1 className="text-xl font-black italic text-orange-500 flex items-center gap-2">
-          <Flame /> Tsuki QLD Bakery Pro
+    <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
+      <header className="bg-slate-900 text-white p-2 sm:p-4 shadow-lg sticky top-0 z-30 flex justify-between items-center gap-2">
+        <h1 className="text-4xl font-black italic text-orange-500 flex items-center gap-2">
+          <Flame /> Tsuki QLD Bakery Pro System
         </h1>
-        <div className="flex items-center gap-4">
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv" title="Import CSV file" />
-          <button onClick={handleImportClick} title="Import CSV" className="bg-slate-700 hover:bg-slate-600 text-orange-400 p-2 rounded-lg transition-colors active:scale-95">
-            <Upload size={20} />
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="text-xl font-mono font-black text-center text-slate-300">
+            {formatFullDateTime(currentTime)}
+          </div>
+          <button onClick={() => { unlockAudio(); setShowRecoverModal(true); }} title="Factory Reset" className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition-colors active:scale-95 flex items-center gap-2">
+            <AlertTriangle size={24} />
+            <span className="font-bold text-base hidden md:inline">Recover</span>
           </button>
-          <div className="text-lg font-mono font-black bg-slate-700 px-4 py-1 rounded-lg">{currentTime}</div>
         </div>
       </header>
 
-      {/* 主看板區域 */}
-      <main className="flex-1 p-4 lg:p-8 flex flex-col gap-6 overflow-hidden pb-48 lg:pb-8">
-        {/* 手機版分頁標籤 */}
-        <nav className="flex bg-white border-b sticky top-0 z-10 lg:hidden rounded-xl shadow-sm mb-4 overflow-hidden">
-          {(['queue', 'baking', 'completed'] as const).map(tab => (
-            <button 
+      {/* Progress Bar */}
+      <div className="w-full bg-slate-200 border-y border-white/20">
+        <div className="relative h-4">
+          <div
+            className="bg-blue-600 h-full transition-all duration-500 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-size-[1rem_1rem] animate-pulse"
+            style={{ width: `${progressPercentage}%` }}
+          ></div>
+          <div
+            className="absolute top-1/2 -translate-y-1/2 text-lg transition-all duration-500"
+            style={{ left: `calc(${progressPercentage}% - 12px)` }}
+          >
+            {progressPercentage >= 100 ? '🥇' : '🚀'}
+          </div>
+        </div>
+      </div>
+
+{/* 主看板區域 */}
+      <main className="flex-1 flex flex-col landscape:flex-row gap-4 p-4 overflow-hidden min-h-0">
+        
+        {/* 統一的手機/直屏版分頁標籤 (由兩組舊代碼整合，移除重複) */}
+        <nav className="flex bg-white border-b sticky top-0 z-10 landscape:hidden rounded-xl shadow-sm mb-4 overflow-hidden shrink-0">
+          {(['queue', 'baking', 'completed'] as const).map((tab) => (
+            <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-3 text-sm font-bold uppercase transition-colors ${activeTab === tab ? 'text-blue-600 bg-blue-50' : 'text-gray-400'}`}
+              className={`flex-1 py-4 font-black uppercase transition-all ${
+                activeTab === tab 
+                  ? 'text-blue-600 border-b-4 border-blue-600 bg-blue-50' 
+                  : 'text-slate-400'
+              }`}
             >
               {tab} ({items[tab].length})
             </button>
           ))}
         </nav>
 
-        <div className="flex flex-col lg:grid lg:grid-cols-5 gap-4 flex-1 overflow-hidden">
-          {/* 1. Queue - 淡藍 */}
-          <section className={`bg-blue-50/50 rounded-[2.5rem] p-4 border border-blue-100 flex flex-col h-full relative lg:col-span-1 min-w-0 ${activeTab !== 'queue' && 'hidden lg:flex'}`}>
-            <h2 className="text-blue-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><Box size={18}/> Queue ({items.queue.length})</h2>
-            {showBulkModal && bulkSelection.length > 0 && (
-              <div className="mb-4">
-                <button onClick={startBulk} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:brightness-110 transition-all">Start Baking ({bulkSelection.length})</button>
-              </div>
-            )}
-            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pb-24">
-              {items.queue.length === 0 ? <EmptyState label="Queue" /> : items.queue.map(i => renderItemCard(i, 'queue'))}
+        {/* 1. Queue - 邏輯：直屏按 Tab 顯示，橫屏必顯示 */}
+        <section className={`bg-blue-50/50 rounded-[2.5rem] p-4 border border-blue-100 flex-col h-full relative landscape:w-80 min-w-0 ${activeTab === 'queue' ? 'flex' : 'hidden'} landscape:flex`}>
+          <h2 className="text-blue-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><Box size={18}/> Queue ({items.queue.length})</h2>
+          {showBulkModal && bulkSelection.length > 0 && (
+            <div className="mb-4">
+              <button onClick={startBulk} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:brightness-110 transition-all">Start Baking ({bulkSelection.length})</button>
             </div>
-          </section>
+          )}
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pb-24">
+            {items.queue.length === 0 ? <EmptyState label="Queue" /> : items.queue.map(i => renderItemCard(i, 'queue'))}
+          </div>
+        </section>
 
-          {/* 2. Baking - Grid of 6 Ovens */}
-          <section className={`bg-orange-50/50 rounded-[2.5rem] p-4 border border-orange-100 flex flex-col h-full overflow-hidden lg:col-span-3 ${activeTab !== 'baking' && 'hidden lg:flex'}`}>
-            <h2 className="text-orange-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><Flame size={18}/> Baking ({items.baking.length})</h2>
-            <div className="flex-1 min-h-0">
-              <div className="grid grid-cols-2 grid-rows-3 gap-3 h-full">
-                {Object.keys(dataToUse).map((ovenKey) => {
-                  const ovenItems = items.baking.filter(i => i.oven === ovenKey);
-                  const isFull = ovenItems.length >= 4;
-                  return (
-                    <div key={ovenKey} className={`bg-white/80 rounded-xl border-2 ${isFull ? 'border-red-400' : 'border-orange-200'} p-2 flex flex-col h-full relative overflow-hidden shadow-sm`}>
-                      <div className={`text-sm font-black uppercase mb-1 border-b-2 pb-1 flex justify-between items-center ${isFull ? 'text-red-600 border-red-100' : 'text-orange-800 border-orange-100'}`}>
-                        <span>{ovenKey} {isFull && '(FULL)'}</span>
-                        <span className={`${isFull ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'} px-1.5 rounded-full`}>{ovenItems.length}/4</span>
-                      </div>
-                      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                        {ovenItems.map(item => (
-                          <div key={item.id} className={`bg-white rounded-lg p-2 border-2 ${item.isOvertime ? 'border-red-500 bg-red-50' : 'border-slate-100'} shadow-sm relative group flex justify-between items-center`}>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-black text-2xl text-slate-800 truncate leading-tight">{item.product}</div>
-                              <div className="font-bold text-lg text-slate-500 mt-0.5">{item.quantity} trays • {item.temp}</div>
-                            </div>
-                            <div className="flex items-center gap-3 ml-2">
-                              <div className={`font-mono font-black text-4xl ${item.isOvertime ? 'text-red-600 animate-pulse' : 'text-blue-600'}`}>
-                                {(() => {
-                                  const remainingSeconds = (item.totalTime * 60) - (item.elapsedTime || 0);
-                                  return item.isOvertime ? `+${formatTime(Math.abs(remainingSeconds))}` : formatTime(remainingSeconds);
-                                })()}
-                              </div>
-                              <button 
-                                onClick={() => setItems(prev => ({...prev, baking: prev.baking.filter(i => i.id !== item.id), completed: [...prev.completed, {...item, completedTime: new Date().toLocaleTimeString()}]}))}
-                                className="text-green-500 hover:bg-green-50 p-1 rounded transition-colors"
-                                title="Done"
-                              >
-                                <CheckCircle size={28} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+        {/* 2. Baking - 維持原有的 Oven 排列不變 */}
+        <section className={`bg-orange-50/50 rounded-[2.5rem] p-4 border border-orange-100 flex-col flex-1 min-h-0 overflow-hidden ${activeTab === 'baking' ? 'flex' : 'hidden'} landscape:flex`}>
+          <h2 className="text-orange-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><Flame size={18}/> Baking ({items.baking.length})</h2>
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+            {/* 這裡完全維持你要求的高度與排列 */}
+            <div className="grid grid-cols-2 landscape:grid-cols-4 gap-3 h-full">
+              {OVENS.map((oven) => {
+                const ovenItems = items.baking.filter(i => i.oven === oven.name);
+                const isFull = ovenItems.length >= oven.capacity;
+                return (
+                  <div 
+                    key={oven.name} 
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const itemJSON = e.dataTransfer.getData('application/json');
+                      if (itemJSON) handleDropOnOven(itemJSON, oven.name);
+                    }}
+                    className={`bg-white/80 rounded-xl border-2 ${isFull ? 'border-red-400' : 'border-orange-200'} p-2 flex flex-col h-full min-h-0 relative overflow-hidden shadow-sm`}>
+                    <div className={`text-sm font-black uppercase mb-1 border-b-2 pb-1 flex justify-between items-center ${isFull ? 'text-red-600 border-red-100' : 'text-orange-800 border-orange-100'}`}>
+                      <span>{oven.name} {isFull && '(FULL)'}</span>
+                      <span className={`${isFull ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'} px-1.5 rounded-full`}>{ovenItems.length}/{oven.capacity}</span>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                      {ovenItems.map(item => (
+                        <div key={item.id} className={`bg-white rounded-lg p-2 border-2 ${item.isOvertime ? 'border-red-500 bg-red-50' : 'border-slate-100'} shadow-sm relative group flex justify-between items-center`}>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-black text-base text-slate-800 truncate leading-tight">{item.product}</div>
+                            <div className="font-bold text-base text-slate-500 mt-0.5">{item.quantity} trays • {item.temp}</div>
+                          </div>
+                          <div className="flex items-center gap-3 ml-2">
+                            <div className={`font-mono font-black text-xl ${item.isOvertime ? 'text-red-600 animate-pulse' : 'text-blue-600'}`}>
+                              {(() => {
+                                const remainingSeconds = (item.totalTime * 60) - (item.elapsedTime || 0);
+                                return item.isOvertime ? `+${formatTime(Math.abs(remainingSeconds))}` : formatTime(remainingSeconds);
+                              })()}
+                            </div>
+                            <button 
+                              onClick={() => setItems(prev => ({...prev, baking: prev.baking.filter(i => i.id !== item.id), completed: [...prev.completed, {...item, completedTime: new Date().toLocaleTimeString()}]}))}
+                              className="text-green-500 hover:bg-green-50 p-1 rounded transition-colors"
+                              title="Done"
+                            >
+                              <CheckCircle size={28} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* 3. Completed - 淡綠 */}
-          <section className={`bg-green-50/50 rounded-[2.5rem] p-4 border border-green-100 flex flex-col h-full overflow-hidden lg:col-span-1 min-w-0 ${activeTab !== 'completed' && 'hidden lg:flex'}`}>
-            <h2 className="text-green-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><CheckCircle size={18}/> Done ({items.completed.length})</h2>
-            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-              {items.completed.length === 0 ? <EmptyState label="Done" /> : items.completed.map(i => renderItemCard(i, 'completed'))}
-            </div>
-          </section>
-        </div>
+        {/* 3. Completed - 邏輯：直屏按 Tab 顯示，橫屏必顯示 */}
+        <section className={`bg-green-50/50 rounded-[2.5rem] p-4 border border-green-100 flex-col h-full overflow-hidden landscape:w-80 min-w-0 ${activeTab === 'completed' ? 'flex' : 'hidden'} landscape:flex`}>
+          <h2 className="text-green-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><CheckCircle size={18}/> Done ({items.completed.length})</h2>
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+            {items.completed.length === 0 ? <EmptyState label="Done" /> : items.completed.map(i => renderItemCard(i, 'completed'))}
+          </div>
+        </section>
       </main>
 
       {/* 手機底部導航 */}
-      <footer className="fixed bottom-0 w-full bg-white/90 backdrop-blur-xl border-t p-4 z-50 pb-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-4 gap-3">
-          <button onClick={() => { unlockAudio(); setShowAddModal(true); }} title="Add Item" className="bg-blue-600 text-white py-3 rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all">
-            <Plus size={20}/> <span className="hidden sm:inline">Add</span>
+      <footer className="bg-white border-t p-2 sm:p-4">
+        <div className="max-w-7xl mx-auto grid grid-cols-5 gap-1 sm:gap-2">
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv" aria-label="Import CSV" />
+          <button onClick={handleImportClick} title="Import CSV" className="py-2 rounded-lg font-bold flex flex-col items-center justify-center transition-all active:scale-95 bg-blue-600 text-white text-xs sm:text-sm">
+            <Upload size={20}/> <span className="mt-1">Import</span>
           </button>
-          <button onClick={() => { unlockAudio(); setShowBulkModal(!showBulkModal); }} title="Bulk Actions" className={`py-3 rounded-2xl font-black flex items-center justify-center transition-all active:scale-95 ${showBulkModal ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
-            <Layers size={20}/> <span className="hidden sm:inline">Bulk</span>
+          <button onClick={handleOpenEditMaster} title="Edit Master" className="py-2 rounded-lg font-bold flex flex-col items-center justify-center transition-all active:scale-95 bg-orange-500 text-white text-xs sm:text-sm">
+            <Pencil size={20}/> <span className="mt-1">Edit</span>
           </button>
-          <button onClick={() => { unlockAudio(); setShowCustomModal(true); }} title="Custom Item" className="bg-slate-100 text-slate-500 py-3 rounded-2xl font-black flex items-center justify-center active:scale-95 transition-all">
-            <Clock size={20}/> <span className="hidden sm:inline">Custom</span>
+          <button onClick={() => { unlockAudio(); setShowCustomModal(true); }} title="Custom Item" className="py-2 rounded-lg font-bold flex flex-col items-center justify-center transition-all active:scale-95 bg-green-600 text-white text-xs sm:text-sm">
+            <Clock size={20}/> <span className="mt-1">Custom</span>
           </button>
-          <button onClick={() => { unlockAudio(); setShowResetModal(true); }} title="Reset Data" className="bg-red-50 text-red-500 py-3 rounded-2xl font-black flex items-center justify-center active:scale-95 transition-all">
-            <RotateCcw size={20}/> <span className="hidden sm:inline">Reset</span>
+          <button onClick={() => { unlockAudio(); setShowBulkModal(!showBulkModal); }} title="Bulk Actions" className={`py-2 rounded-lg font-bold flex flex-col items-center justify-center transition-all active:scale-95 text-xs sm:text-sm ${showBulkModal ? 'bg-yellow-500 text-black' : 'bg-slate-100 text-slate-500'}`}>
+            <Layers size={20}/> <span className="mt-1">Bulk</span>
+          </button>
+          <button onClick={() => { unlockAudio(); setShowResetModal(true); }} title="Reset Progress" className="py-2 rounded-lg font-bold flex flex-col items-center justify-center transition-all active:scale-95 bg-[#FFB6C1] text-red-800 text-xs sm:text-sm">
+            <RotateCcw size={20}/> <span className="mt-1">Reset</span>
           </button>
         </div>
       </footer>
 
       {/* --- Modals --- */}
 
-      {/* 新增項目彈窗 */}
-      {showAddModal && (
+      {/* Edit Master Modal */}
+      {showEditMasterModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-100 backdrop-blur-sm">
-          <div className="bg-white rounded-4xl p-6 w-full max-w-sm animate-in fade-in zoom-in duration-200">
-            <h2 className="text-xl font-black mb-4 flex items-center gap-2 text-slate-800">Add Item</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase">1. Select Oven</label>
-                <select title="Select Oven" aria-label="Select Oven" onChange={(e) => {setSelectedOven(e.target.value); setSelectedProducts([]);}} className="w-full border-2 border-gray-100 rounded-xl p-3 mt-1 focus:border-blue-500 outline-none transition-all font-bold text-slate-700">
-                  <option value="">Select Oven...</option>
-                  {Object.keys(dataToUse).map(o => <option key={o} value={o}>{dataToUse[o].name}</option>)}
-                </select>
-              </div>
-              {selectedOven && (
-                <>
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase">2. Select Product(s)</label>
-                    <div className="mt-2 max-h-48 overflow-y-auto space-y-3 border-2 border-gray-100 rounded-xl p-4 custom-scrollbar">
-                      {Object.keys(dataToUse[selectedOven].products).map(p => (
-                        <div key={p} className="flex items-center">
-                          <input
-                            type="checkbox"
-                            id={`product-${p}`}
-                            checked={selectedProducts.includes(p)}
-                            onChange={() => setSelectedProducts(prev => prev.includes(p) ? prev.filter(item => item !== p) : [...prev, p])}
-                            className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer"
-                          />
-                          <label htmlFor={`product-${p}`} className="ml-3 font-bold text-slate-700 cursor-pointer select-none">{p}</label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label htmlFor="quantity-input" className="text-[10px] font-bold text-gray-400 uppercase">3. Quantity (per product)</label>
-                    <input
-                      id="quantity-input"
-                      type="number"
-                      value={quantity}
-                      onChange={e => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full border-2 border-gray-100 rounded-xl p-3 mt-1 focus:border-blue-500 outline-none transition-all font-bold text-slate-700"
-                    />
-                  </div>
-                </>
+          <div className="bg-white rounded-4xl p-6 w-full max-w-4xl h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
+            <h2 className="text-xl font-black mb-4 flex justify-between items-center text-slate-800">
+              <span>Edit Master List (Queue)</span>
+              <button onClick={handleAddEditableItem} className="bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-green-600 transition-colors">Add New Product</button>
+            </h2>
+            <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar space-y-2">
+              {editableQueue.map(item => (
+                <div key={item.id} className="bg-slate-50 p-3 rounded-xl border grid grid-cols-12 gap-3 items-center">
+                  <input value={item.product} onChange={e => handleUpdateEditableItem(item.id, 'product', e.target.value)} className="col-span-4 p-2 rounded-md border font-semibold" placeholder="Product Name" />
+                  <input type="number" value={item.quantity} onChange={e => handleUpdateEditableItem(item.id, 'quantity', parseInt(e.target.value) || 1)} className="col-span-1 p-2 rounded-md border font-semibold" placeholder="Qty" />
+                  <input value={item.temp} onChange={e => handleUpdateEditableItem(item.id, 'temp', e.target.value)} className="col-span-2 p-2 rounded-md border font-semibold" placeholder="Temp" />
+                  <input type="number" value={item.totalTime} onChange={e => handleUpdateEditableItem(item.id, 'totalTime', parseFloat(e.target.value) || 10)} className="col-span-2 p-2 rounded-md border font-semibold" placeholder="Time (min)" />
+                  <select aria-label="Select Oven" value={item.oven} onChange={e => handleUpdateEditableItem(item.id, 'oven', e.target.value)} className="col-span-2 p-2 rounded-md border bg-white font-semibold custom-scrollbar">
+                    {OVENS.map(o => <option key={o.name} value={o.name}>{o.name}</option>)}
+                  </select>
+                  <button aria-label="Delete Item" title="Delete Item" onClick={() => handleDeleteEditableItem(item.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-100 rounded-lg transition-colors">
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              ))}
+              {editableQueue.length === 0 && (
+                <div className="text-center py-20 text-gray-300 flex flex-col items-center justify-center h-full">
+                  <Box size={48} className="opacity-20 mb-2"/>
+                  <p className="text-sm uppercase font-bold tracking-widest">Master List is Empty</p>
+                  <p className="text-xs text-gray-400 mt-2">Click 'Add New Product' to get started.</p>
+                </div>
               )}
+            </div>
+            <div className="border-t pt-4 mt-4">
               <div className="flex gap-2 mt-6">
-                <button onClick={() => setShowAddModal(false)} className="flex-1 py-3 font-bold text-gray-400 rounded-2xl hover:bg-gray-100 transition-colors">Cancel</button>
-                <button onClick={handleAddMultiple} disabled={!selectedOven || selectedProducts.length === 0} className="flex-2 bg-blue-600 text-white py-3 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:brightness-110 transition-all disabled:bg-slate-300 disabled:shadow-none">Add to Queue ({selectedProducts.length})</button>
+                <button onClick={() => setShowEditMasterModal(false)} className="flex-1 py-3 font-bold text-gray-400 rounded-2xl hover:bg-gray-100 transition-colors">Cancel</button>
+                <button onClick={handleSaveMasterEdits} className="flex-auto bg-blue-600 text-white py-3 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:brightness-110 transition-all">Exit & Save</button>
               </div>
             </div>
           </div>
@@ -592,12 +857,13 @@ const App = () => {
             <h2 className="text-2xl font-black mb-6 text-slate-800">Add Custom Item</h2>
             <div className="space-y-4">
               <select 
+                aria-label="Select Oven"
                 value={customForm.oven} 
                 onChange={e => setCustomForm({...customForm, oven: e.target.value})} 
                 className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-orange-500 outline-none"
               >
                 <option value="">Select Oven...</option>
-                {Object.keys(dataToUse).map(o => <option key={o} value={o}>{dataToUse[o].name}</option>)}
+                {OVENS.map(o => <option key={o.name} value={o.name}>{o.name}</option>)}
               </select>
               <input placeholder="Product Name" value={customForm.product} onChange={e => setCustomForm({...customForm, product: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
               <div className="grid grid-cols-2 gap-4">
@@ -618,16 +884,33 @@ const App = () => {
 
       {/* 重設確認彈窗 */}
       {showResetModal && (
+        <div className="fixed inset-0 bg-blue-500/20 backdrop-blur-md flex items-center justify-center p-4 z-100">
+          <div className="bg-white rounded-4xl p-8 w-full max-w-sm text-center shadow-2xl animate-in fade-in duration-200">
+            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <RotateCcw size={32}/>
+            </div>
+            <h2 className="text-2xl font-black text-slate-800">Confirm Reset Progress</h2>
+            <p className="text-gray-500 text-sm mt-2">This will move all items from Baking and Done back to the Queue. No items will be deleted.</p>
+            <div className="flex gap-3 mt-8">
+              <button onClick={() => setShowResetModal(false)} className="flex-1 py-3 font-bold text-gray-400 rounded-2xl hover:bg-gray-100 transition-colors">Cancel</button>
+              <button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-3 rounded-2xl font-bold hover:brightness-110 transition-all shadow-lg shadow-blue-200">Confirm & Reset</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 恢復出廠彈窗 */}
+      {showRecoverModal && (
         <div className="fixed inset-0 bg-red-500/20 backdrop-blur-md flex items-center justify-center p-4 z-100">
           <div className="bg-white rounded-4xl p-8 w-full max-w-sm text-center shadow-2xl animate-in fade-in duration-200">
             <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
               <AlertTriangle size={32}/>
             </div>
-            <h2 className="text-2xl font-black text-slate-800">Confirm Clear All</h2>
-            <p className="text-gray-500 text-sm mt-2">This will delete all queued, baking, and completed data. This action cannot be undone.</p>
+            <h2 className="text-2xl font-black text-slate-800">Confirm Factory Reset</h2>
+            <p className="text-gray-500 text-sm mt-2">This will delete all current data and restore the original preset list. This action cannot be undone.</p>
             <div className="flex gap-3 mt-8">
-              <button onClick={() => setShowResetModal(false)} className="flex-1 py-3 font-bold text-gray-400 rounded-2xl hover:bg-gray-100 transition-colors">Keep Data</button>
-              <button onClick={() => {setItems({queue:[], baking:[], completed:[]}); setShowResetModal(false);}} className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold hover:brightness-110 transition-all shadow-lg shadow-red-200">Confirm & Delete</button>
+              <button onClick={() => setShowRecoverModal(false)} className="flex-1 py-3 font-bold text-gray-400 rounded-2xl hover:bg-gray-100 transition-colors">Cancel</button>
+              <button onClick={handleRecover} className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold hover:brightness-110 transition-all shadow-lg shadow-red-200">Confirm & Delete</button>
             </div>
           </div>
         </div>
@@ -635,7 +918,7 @@ const App = () => {
 
       {/* 嚴重超時警告彈窗 (Critical Alert) */}
       {overtimeAlertItem && (
-        <div className="fixed inset-0 bg-red-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[110]">
+        <div className="fixed inset-0 bg-red-900/80 backdrop-blur-md flex items-center justify-center p-4 z-110">
           <div className="bg-white rounded-4xl p-8 w-full max-w-sm text-center shadow-2xl animate-in fade-in zoom-in duration-200 border-4 border-red-600">
             <div className="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
               <AlertTriangle size={40}/>
@@ -659,4 +942,4 @@ const App = () => {
   );
 }
 
-export default App
+export default App;
