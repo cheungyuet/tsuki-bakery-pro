@@ -237,7 +237,7 @@ const App = () => {
     if (item) {
       const currentOvenCount = items.baking.filter(i => i.oven === item.oven).length;
       if (currentOvenCount >= 4) {
-        alert(`Oven ${item.oven} is FULL (Max 4 trays)`);
+        alert('OVEN FULL');
         return;
       }
 
@@ -413,7 +413,7 @@ const App = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <header className="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-30 flex justify-between items-center">
         <h1 className="text-xl font-black italic text-orange-500 flex items-center gap-2">
           <Flame /> Tsuki QLD Bakery Pro
@@ -474,11 +474,11 @@ const App = () => {
                         {ovenItems.map(item => (
                           <div key={item.id} className={`bg-white rounded-lg p-2 border-2 ${item.isOvertime ? 'border-red-500 bg-red-50' : 'border-slate-100'} shadow-sm relative group flex justify-between items-center`}>
                             <div className="min-w-0 flex-1">
-                              <div className="font-bold text-xl text-slate-800 truncate leading-tight">{item.product}</div>
-                              <div className="font-black text-lg text-slate-500 mt-0.5">{item.quantity} trays • {item.temp}</div>
+                              <div className="font-black text-2xl text-slate-800 truncate leading-tight">{item.product}</div>
+                              <div className="font-bold text-lg text-slate-500 mt-0.5">{item.quantity} trays • {item.temp}</div>
                             </div>
                             <div className="flex items-center gap-3 ml-2">
-                              <div className={`font-mono font-black text-3xl ${item.isOvertime ? 'text-red-600 animate-pulse' : 'text-blue-600'}`}>
+                              <div className={`font-mono font-black text-4xl ${item.isOvertime ? 'text-red-600 animate-pulse' : 'text-blue-600'}`}>
                                 {(() => {
                                   const remainingSeconds = (item.totalTime * 60) - (item.elapsedTime || 0);
                                   return item.isOvertime ? `+${formatTime(Math.abs(remainingSeconds))}` : formatTime(remainingSeconds);
