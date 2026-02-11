@@ -788,7 +788,7 @@ const App = () => {
       {/* 手機底部導航 */}
       <footer className="bg-white border-t p-2 sm:p-4">
         <div className="max-w-7xl mx-auto grid grid-cols-5 gap-1 sm:gap-2">
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv" aria-label="Import CSV" />
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv" />
           <button onClick={handleImportClick} title="Import CSV" className="py-2 rounded-lg font-bold flex flex-col items-center justify-center transition-all active:scale-95 bg-blue-600 text-white text-xs sm:text-sm">
             <Upload size={20}/> <span className="mt-1">Import</span>
           </button>
@@ -824,10 +824,10 @@ const App = () => {
                   <input type="number" value={item.quantity} onChange={e => handleUpdateEditableItem(item.id, 'quantity', parseInt(e.target.value) || 1)} className="col-span-1 p-2 rounded-md border font-semibold" placeholder="Qty" />
                   <input value={item.temp} onChange={e => handleUpdateEditableItem(item.id, 'temp', e.target.value)} className="col-span-2 p-2 rounded-md border font-semibold" placeholder="Temp" />
                   <input type="number" value={item.totalTime} onChange={e => handleUpdateEditableItem(item.id, 'totalTime', parseFloat(e.target.value) || 10)} className="col-span-2 p-2 rounded-md border font-semibold" placeholder="Time (min)" />
-                  <select aria-label="Select Oven" value={item.oven} onChange={e => handleUpdateEditableItem(item.id, 'oven', e.target.value)} className="col-span-2 p-2 rounded-md border bg-white font-semibold custom-scrollbar">
+                  <select value={item.oven} onChange={e => handleUpdateEditableItem(item.id, 'oven', e.target.value)} className="col-span-2 p-2 rounded-md border bg-white font-semibold custom-scrollbar">
                     {OVENS.map(o => <option key={o.name} value={o.name}>{o.name}</option>)}
                   </select>
-                  <button aria-label="Delete Item" title="Delete Item" onClick={() => handleDeleteEditableItem(item.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-100 rounded-lg transition-colors">
+                  <button onClick={() => handleDeleteEditableItem(item.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-100 rounded-lg transition-colors">
                     <Trash2 size={18} />
                   </button>
                 </div>
@@ -857,7 +857,6 @@ const App = () => {
             <h2 className="text-2xl font-black mb-6 text-slate-800">Add Custom Item</h2>
             <div className="space-y-4">
               <select 
-                aria-label="Select Oven"
                 value={customForm.oven} 
                 onChange={e => setCustomForm({...customForm, oven: e.target.value})} 
                 className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-orange-500 outline-none"
