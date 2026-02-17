@@ -724,12 +724,12 @@ const App = () => {
       <main className="flex-1 flex flex-col landscape:flex-row gap-2 sm:gap-4 p-2 sm:p-4 overflow-hidden min-h-0">
         
         {/* 統一的手機/直屏版分頁標籤 (由兩組舊代碼整合，移除重複) */}
-        <nav className="flex bg-white border-b sticky top-0 z-10 landscape:hidden rounded-xl shadow-sm mb-4 overflow-hidden shrink-0">
+        <nav className="flex bg-white border-b sticky top-0 z-10 landscape:hidden rounded-xl shadow-sm mb-2 overflow-hidden shrink-0">
           {(['queue', 'baking', 'completed'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-4 font-black uppercase transition-all ${
+              className={`flex-1 py-2 font-black uppercase transition-all ${
                 activeTab === tab 
                   ? 'text-blue-600 border-b-4 border-blue-600 bg-blue-50' 
                   : 'text-slate-400'
@@ -773,7 +773,7 @@ const App = () => {
                       if (itemJSON) handleDropOnOven(itemJSON, oven.name);
                     }}
                     className={`bg-white/80 rounded-xl border-2 ${isFull ? 'border-red-400' : 'border-orange-200'} p-2 flex flex-col h-full min-h-0 relative overflow-hidden shadow-sm`}>
-                    <div className={`text-sm font-black uppercase mb-1 border-b-2 pb-1 flex justify-between items-center ${isFull ? 'text-red-600 border-red-100' : 'text-orange-800 border-orange-100'}`}>
+                    <div className={`text-xs font-black uppercase mb-1 border-b-2 pb-1 flex justify-between items-center ${isFull ? 'text-red-600 border-red-100' : 'text-orange-800 border-orange-100'}`}>
                       <span>{oven.name} {isFull && '(FULL)'}</span>
                       <span className={`${isFull ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'} px-1.5 rounded-full`}>{currentLoad}/{oven.capacity}</span>
                     </div>
@@ -781,11 +781,11 @@ const App = () => {
                       {ovenItems.map(item => (
                         <div key={item.id} className={`bg-white rounded-lg p-2 border-2 ${item.isOvertime ? 'border-red-500 bg-red-50' : 'border-slate-100'} shadow-sm relative group flex justify-between items-center`}>
                           <div className="min-w-0 flex-1">
-                            <div className="font-black text-base text-slate-800 truncate leading-tight">{item.product}</div>
-                            <div className="font-bold text-base text-slate-500 mt-0.5">{item.quantity} trays • {item.temp}</div>
+                            <div className="font-black text-sm text-slate-800 truncate leading-tight">{item.product}</div>
+                            <div className="font-bold text-xs text-slate-500 mt-0.5">{item.quantity} trays • {item.temp}</div>
                           </div>
                           <div className="flex items-center gap-3 ml-2">
-                            <div className={`font-mono font-black text-xl ${item.isOvertime ? 'text-red-600 animate-pulse' : 'text-blue-600'}`}>
+                            <div className={`font-mono font-black text-lg ${item.isOvertime ? 'text-red-600 animate-pulse' : 'text-blue-600'}`}>
                               {(() => {
                                 const remainingSeconds = (item.totalTime * 60) - (item.elapsedTime || 0);
                                 return item.isOvertime ? `+${formatTime(Math.abs(remainingSeconds))}` : formatTime(remainingSeconds);
