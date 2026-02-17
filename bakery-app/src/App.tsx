@@ -689,9 +689,9 @@ const App = () => {
 
   return (
     <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
-      <header className="bg-slate-900 text-white p-2 sm:p-4 shadow-lg sticky top-0 z-30 flex justify-between items-center gap-2">
-        <h1 className="text-4xl font-black italic text-orange-500 flex items-center gap-2">
-          <Flame /> Tsuki QLD Bakery Pro System
+      <header className="bg-slate-900 text-white p-3 sm:p-4 shadow-lg sticky top-0 z-30 flex justify-between items-center gap-2">
+        <h1 className="text-lg sm:text-2xl md:text-4xl font-black italic text-orange-500 flex items-center gap-2 truncate">
+          <Flame className="shrink-0 w-6 h-6 sm:w-8 sm:h-8 md:w-auto md:h-auto" /> <span className="truncate">Tsuki QLD Bakery Pro System</span>
         </h1>
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="text-xl font-mono font-black text-center text-slate-300">
@@ -721,7 +721,7 @@ const App = () => {
       </div>
 
 {/* 主看板區域 */}
-      <main className="flex-1 flex flex-col landscape:flex-row gap-4 p-4 overflow-hidden min-h-0">
+      <main className="flex-1 flex flex-col landscape:flex-row gap-2 sm:gap-4 p-2 sm:p-4 overflow-hidden min-h-0">
         
         {/* 統一的手機/直屏版分頁標籤 (由兩組舊代碼整合，移除重複) */}
         <nav className="flex bg-white border-b sticky top-0 z-10 landscape:hidden rounded-xl shadow-sm mb-4 overflow-hidden shrink-0">
@@ -741,7 +741,7 @@ const App = () => {
         </nav>
 
         {/* 1. Queue - 邏輯：直屏按 Tab 顯示，橫屏必顯示 */}
-        <section className={`bg-blue-50/50 rounded-[2.5rem] p-4 border border-blue-100 flex-col h-full relative landscape:w-80 min-w-0 ${activeTab === 'queue' ? 'flex' : 'hidden'} landscape:flex`}>
+        <section className={`bg-blue-50/50 rounded-3xl sm:rounded-[2.5rem] p-3 sm:p-4 border border-blue-100 flex-col h-full relative landscape:w-80 min-w-0 ${activeTab === 'queue' ? 'flex' : 'hidden'} landscape:flex`}>
           <h2 className="text-blue-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><Box size={18}/> Queue ({items.queue.length})</h2>
           {showBulkModal && bulkSelection.length > 0 && (
             <div className="mb-4">
@@ -754,11 +754,11 @@ const App = () => {
         </section>
 
         {/* 2. Baking - 維持原有的 Oven 排列不變 */}
-        <section className={`bg-orange-50/50 rounded-[2.5rem] p-4 border border-orange-100 flex-col flex-1 min-h-0 overflow-hidden ${activeTab === 'baking' ? 'flex' : 'hidden'} landscape:flex`}>
+        <section className={`bg-orange-50/50 rounded-3xl sm:rounded-[2.5rem] p-3 sm:p-4 border border-orange-100 flex-col flex-1 min-h-0 overflow-hidden ${activeTab === 'baking' ? 'flex' : 'hidden'} landscape:flex`}>
           <h2 className="text-orange-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><Flame size={18}/> Baking ({items.baking.length})</h2>
           <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {/* 這裡完全維持你要求的高度與排列 */}
-            <div className="grid grid-cols-2 landscape:grid-cols-4 gap-3 h-full">
+            <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2 sm:gap-3 h-full">
               {OVENS.map((oven) => {
                 const ovenItems = items.baking.filter(i => i.oven === oven.name);
                 const currentLoad = ovenItems.reduce((sum, i) => sum + i.quantity, 0);
@@ -810,7 +810,7 @@ const App = () => {
         </section>
 
         {/* 3. Completed - 邏輯：直屏按 Tab 顯示，橫屏必顯示 */}
-        <section className={`bg-green-50/50 rounded-[2.5rem] p-4 border border-green-100 flex-col h-full overflow-hidden landscape:w-80 min-w-0 ${activeTab === 'completed' ? 'flex' : 'hidden'} landscape:flex`}>
+        <section className={`bg-green-50/50 rounded-3xl sm:rounded-[2.5rem] p-3 sm:p-4 border border-green-100 flex-col h-full overflow-hidden landscape:w-80 min-w-0 ${activeTab === 'completed' ? 'flex' : 'hidden'} landscape:flex`}>
           <h2 className="text-green-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><CheckCircle size={18}/> Done ({items.completed.length})</h2>
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
             {items.completed.length === 0 ? <EmptyState label="Done" /> : items.completed.map(i => renderItemCard(i, 'completed'))}
@@ -845,7 +845,7 @@ const App = () => {
       {/* Edit Master Modal */}
       {showEditMasterModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-100 backdrop-blur-sm">
-          <div className="bg-white rounded-4xl p-6 w-full max-w-5xl h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200 shadow-2xl">
+          <div className="bg-white rounded-3xl sm:rounded-4xl p-4 sm:p-6 w-full max-w-5xl h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200 shadow-2xl">
             <h2 className="text-2xl font-black mb-6 flex justify-between items-center text-slate-800 border-b pb-4">
               <span className="flex items-center gap-2"><Pencil className="text-orange-500"/> Edit Master List</span>
               <button onClick={handleAddEditableItem} className="bg-green-500 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-green-600 transition-colors shadow-lg shadow-green-200 flex items-center gap-2">
@@ -853,7 +853,7 @@ const App = () => {
               </button>
             </h2>
             
-            <div className="grid grid-cols-12 gap-4 px-4 py-2 font-black text-slate-400 text-xs uppercase tracking-wider">
+            <div className="grid grid-cols-12 gap-2 sm:gap-4 px-2 sm:px-4 py-2 font-black text-slate-400 text-xs uppercase tracking-wider min-w-[600px]">
               <div className="col-span-4">Product Name</div>
               <div className="col-span-1 text-center">Trays</div>
               <div className="col-span-2">Temp</div>
@@ -862,9 +862,9 @@ const App = () => {
               <div className="col-span-1"></div>
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar space-y-2">
+            <div className="flex-1 overflow-y-auto overflow-x-auto pr-2 -mr-2 custom-scrollbar space-y-2">
               {editableQueue.map(item => (
-                <div key={item.id} className="bg-slate-50 hover:bg-white p-3 rounded-xl border border-slate-200 hover:border-blue-300 transition-all grid grid-cols-12 gap-4 items-center shadow-sm group">
+                <div key={item.id} className="bg-slate-50 hover:bg-white p-3 rounded-xl border border-slate-200 hover:border-blue-300 transition-all grid grid-cols-12 gap-2 sm:gap-4 items-center shadow-sm group min-w-[600px]">
                   <input value={item.product} onChange={e => handleUpdateEditableItem(item.id, 'product', e.target.value)} className="col-span-4 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all" placeholder="Product Name" />
                   <input type="number" value={item.quantity} onChange={e => handleUpdateEditableItem(item.id, 'quantity', parseInt(e.target.value) || 1)} className="col-span-1 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none text-center transition-all" placeholder="Qty" />
                   <input value={item.temp} onChange={e => handleUpdateEditableItem(item.id, 'temp', e.target.value)} className="col-span-2 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all" placeholder="Temp" />
@@ -1035,7 +1035,7 @@ const StartBakingModal = ({ item, targetOven, onConfirm, onClose }: { item: Bake
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-100">
-            <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-md animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 w-full max-w-md animate-in fade-in zoom-in duration-200">
                 <h2 className="text-2xl font-black mb-2 text-slate-800">Start Baking</h2>
                 <p className="text-slate-600 font-bold text-lg mb-1">{item.product}</p>
                 <p className="text-sm text-slate-400 mb-6">
