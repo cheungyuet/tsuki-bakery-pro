@@ -35,6 +35,7 @@ interface CustomFormState {
   steam: boolean;
   special: string;
   oven: string;
+  quantity: string;
 }
 
 const OVENS = [
@@ -137,7 +138,7 @@ const App = () => {
   const [showEditMasterModal, setShowEditMasterModal] = useState(false);
   
   // Form States
-  const [customForm, setCustomForm] = useState<CustomFormState>({ product: '', topTemp: '', bottomTemp: '', time: '', steam: false, special: '', oven: '' });
+  const [customForm, setCustomForm] = useState<CustomFormState>({ product: '', topTemp: '', bottomTemp: '', time: '', steam: false, special: '', oven: '', quantity: '1' });
   const [bulkSelection, setBulkSelection] = useState<number[]>([]);
   const [editableQueue, setEditableQueue] = useState<BakeryItem[]>([]);
   const [overtimeAlertItem, setOvertimeAlertItem] = useState<BakeryItem | null>(null);
@@ -145,12 +146,17 @@ const App = () => {
 
   // Pre-load audio to be ready for playback
   const [currentTime, setCurrentTime] = useState(new Date());
-  const notificationSound = useRef(new Audio('/notification.mp3')); // Ensure notification.mp3 is in the /public folder
+  const notificationSound = useRef<HTMLAudioElement | null>(null);
   const audioUnlocked = useRef(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    notificationSound.current = new Audio('/notification.mp3');
+  }, []);
+
   const unlockAudio = () => {
-    if (audioUnlocked.current) return;
+    if (audioUnlocked.current || !notificationSound.current) return;
     // A common trick to unlock audio context in browsers.
     const sound = notificationSound.current;
     sound.volume = 0;
@@ -186,11 +192,17 @@ const App = () => {
           // Trigger sound and notification exactly when the timer hits zero
           // AND when it is overtime by 60 seconds (reminder)
           if (newElapsed === targetSeconds || newElapsed === targetSeconds + 60) {
-            notificationSound.current.currentTime = 0;
-            notificationSound.current.play().catch(e => console.error("Error playing sound:", e));
+            if (notificationSound.current) {
+              notificationSound.current.currentTime = 0;
+              notificationSound.current.play().catch(e => console.error("Error playing sound:", e));
+            }
             if ('Notification' in window && Notification.permission === 'granted') {
-              const msg = newElapsed > targetSeconds ? `${item.product} is OVERTIME (1 min)!` : `${item.product} is ready!`;
-              new Notification(msg, { body: `Oven: ${item.oven}`, tag: `item-${item.id}` });
+              try {
+                const msg = newElapsed > targetSeconds ? `${item.product} is OVERTIME (1 min)!` : `${item.product} is ready!`;
+                new Notification(msg, { body: `Oven: ${item.oven}`, tag: `item-${item.id}` });
+              } catch (e) {
+                console.error("Notification error:", e);
+              }
             }
           }
           return { ...item, elapsedTime: newElapsed, isOvertime };
@@ -214,7 +226,7 @@ const App = () => {
     if (severeItem) {
       setOvertimeAlertItem(severeItem);
       // 觸發警告時嘗試播放聲音
-      notificationSound.current.play().catch(() => {});
+      notificationSound.current?.play().catch(() => {});
     }
   }, [items.baking, overtimeAlertItem]);
 
@@ -257,14 +269,14 @@ const App = () => {
     addToQueue({
       oven: customForm.oven,
       product: customForm.product,
-      quantity: 1,
+      quantity: parseInt(customForm.quantity) || 1,
       temp: (customForm.topTemp || customForm.bottomTemp) ? `${customForm.topTemp || '0'}°C/${customForm.bottomTemp || '0'}°C` : 'Custom',
       totalTime: parseFloat(customForm.time),
       steam: customForm.steam,
       special: customForm.special,
       isCustom: true
     });
-    setCustomForm({ product: '', topTemp: '', bottomTemp: '', time: '', steam: false, special: '', oven: '' });
+    setCustomForm({ product: '', topTemp: '', bottomTemp: '', time: '', steam: false, special: '', oven: '', quantity: '1' });
     setShowCustomModal(false);
   };
 
@@ -700,9 +712,9 @@ const App = () => {
   const progressPercentage = totalItems > 0 ? (items.completed.length / totalItems) * 100 : 0;
 
   return (
-    <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
+    <div className="h-screen supports-[height:100dvh]:h-[100dvh] bg-slate-50 flex flex-col overflow-hidden">
       <header className="bg-slate-900 text-white p-3 sm:p-4 shadow-lg sticky top-0 z-30 flex justify-between items-center gap-2">
-        <h1 className="text-lg sm:text-2xl md:text-4xl font-black italic text-orange-500 flex items-center gap-2 truncate">
+        <h1 className="text-lg sm:text-xl font-black italic text-orange-500 flex items-center gap-2 truncate">
           <Flame className="shrink-0 w-6 h-6 sm:w-8 sm:h-8 md:w-auto md:h-auto" /> <span className="truncate">Tsuki QLD Bakery Pro System</span>
         </h1>
         <div className="flex items-center gap-2 sm:gap-4">
@@ -768,7 +780,7 @@ const App = () => {
         {/* 2. Baking - 維持原有的 Oven 排列不變 */}
         <section className={`bg-orange-50/50 rounded-3xl sm:rounded-[2.5rem] p-3 sm:p-4 border border-orange-100 flex-col flex-1 min-h-0 overflow-hidden ${activeTab === 'baking' ? 'flex' : 'hidden'} landscape:flex`}>
           <h2 className="text-orange-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><Flame size={18}/> Baking ({items.baking.length})</h2>
-          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pb-20">
             {/* 這裡完全維持你要求的高度與排列 */}
             <div className="grid grid-cols-1 landscape:grid-cols-4 gap-2 sm:gap-3 landscape:h-full">
               {OVENS.map((oven) => {
@@ -824,7 +836,7 @@ const App = () => {
         {/* 3. Completed - 邏輯：直屏按 Tab 顯示，橫屏必顯示 */}
         <section className={`bg-green-50/50 rounded-3xl sm:rounded-[2.5rem] p-3 sm:p-4 border border-green-100 flex-col h-full overflow-hidden landscape:w-80 min-w-0 ${activeTab === 'completed' ? 'flex' : 'hidden'} landscape:flex`}>
           <h2 className="text-green-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><CheckCircle size={18}/> Done ({items.completed.length})</h2>
-          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pb-20">
             {items.completed.length === 0 ? <EmptyState label="Done" /> : items.completed.map(i => renderItemCard(i, 'completed'))}
           </div>
         </section>
@@ -950,7 +962,10 @@ const App = () => {
               <input placeholder="Top Temp" type="number" value={customForm.topTemp} onChange={e => setCustomForm({...customForm, topTemp: e.target.value})} className="p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
               <input placeholder="Bottom Temp" type="number" value={customForm.bottomTemp} onChange={e => setCustomForm({...customForm, bottomTemp: e.target.value})} className="p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
               </div>
-            <input placeholder="Time (min)" type="number" step="0.5" value={customForm.time} onChange={e => setCustomForm({...customForm, time: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
+              <div className="grid grid-cols-2 gap-4">
+                <input placeholder="Time (min)" type="number" step="0.5" value={customForm.time} onChange={e => setCustomForm({...customForm, time: e.target.value})} className="p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
+                <input placeholder="Quantity" type="number" inputMode="numeric" value={customForm.quantity} onChange={e => setCustomForm({...customForm, quantity: e.target.value})} className="p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
+              </div>
               <div className="flex items-center gap-2 p-2">
                  <input type="checkbox" id="steam" checked={customForm.steam} onChange={e => setCustomForm({...customForm, steam: e.target.checked})} className="w-5 h-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
                  <label htmlFor="steam" className="font-bold text-slate-600">Steam Required</label>
