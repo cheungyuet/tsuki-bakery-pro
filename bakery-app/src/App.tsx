@@ -114,7 +114,20 @@ const PRESET_DATA: ItemsState = {
 const App = () => {
   // --- 狀態管理 ---
   const [activeTab, setActiveTab] = useState<keyof ItemsState>('queue');
-  const [items, setItems] = useState<ItemsState>(() => PRESET_DATA);
+  const [items, setItems] = useState<ItemsState>(() => {
+    const savedItems = localStorage.getItem('tsuki-bakery-data');
+    if (savedItems) {
+      try {
+        // Try to load and parse data from localStorage
+        return JSON.parse(savedItems);
+      } catch (e) {
+        console.error("Failed to parse item data from localStorage, falling back to presets.", e);
+        // If parsing fails, fall through to use the default preset data
+      }
+    }
+    // If no saved data, return the default preset data
+    return PRESET_DATA;
+  });
   
   // Modals
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -148,23 +161,6 @@ const App = () => {
 
   // --- 初始化與持久化 ---
   useEffect(() => {
-    // Load item states from localStorage
-    const savedItems = localStorage.getItem('tsuki-bakery-data');
-    if (savedItems) {
-      try {
-        setItems(JSON.parse(savedItems));
-      } catch (e) {
-        console.error("Failed to parse item data from localStorage", e);
-        // If parsing fails, start with preset
-        setItems(PRESET_DATA);
-        localStorage.setItem('tsuki-bakery-data', JSON.stringify(PRESET_DATA));
-      }
-    } else {
-      // First time load, use preset data and save it
-      setItems(() => PRESET_DATA);
-      localStorage.setItem('tsuki-bakery-data', JSON.stringify(PRESET_DATA));
-    }
-
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
@@ -306,20 +302,17 @@ const App = () => {
         return;
     }
 
-    let assignedOven: string | null = null;
     let targetOvens: string[] = [];
 
-    // Case 1: An oven was pre-selected via drag-and-drop
+    // Determine which ovens to check
     if (preselectedOven) {
         if (!checkOvenCompatibility(item, preselectedOven)) {
             alert('Wrong Oven Type for this Product!');
-            setStartBakingInfo(null); // Close modal on error
+            setStartBakingInfo(null);
             return;
         }
         targetOvens = [preselectedOven];
-    } 
-    // Case 2: Find an oven from the group
-    else {
+    } else {
         const { ovenGroup } = item;
         if (ovenGroup === 'Group A') {
             targetOvens = ['Steam Oven 1', 'Steam Oven 2', 'Steam Oven 3', 'Steam Oven 4'];
@@ -328,54 +321,73 @@ const App = () => {
         } else if (ovenGroup === 'Group C') {
             targetOvens = ['Convection Oven 8'];
         } else {
-            targetOvens = [item.oven]; // Fallback for items without a group
+            // Fallback for items without a group (e.g., custom items assigned to a specific oven)
+            targetOvens = [item.oven];
         }
     }
 
-    // Find an oven with enough capacity
+    let remainingQuantityToBake = quantityToBake;
+    const newBakingItems: BakeryItem[] = [];
+
     for (const ovenName of targetOvens) {
+        if (remainingQuantityToBake <= 0) break;
+
         const ovenConfig = OVENS.find(o => o.name === ovenName);
         if (!ovenConfig) continue;
 
+        // Calculate current load from the main state
         const currentLoad = items.baking
             .filter(i => i.oven === ovenName)
             .reduce((sum, i) => sum + i.quantity, 0);
 
-        if (currentLoad + quantityToBake <= ovenConfig.capacity) {
-            assignedOven = ovenName;
-            break; // Found a spot
+        const availableSpace = ovenConfig.capacity - currentLoad;
+
+        if (availableSpace > 0) {
+            const quantityForThisOven = Math.min(remainingQuantityToBake, availableSpace);
+
+            if (quantityForThisOven > 0) {
+                const newBakingItem: BakeryItem = {
+                    ...item,
+                    id: Date.now() + Math.random() + newBakingItems.length, // Ensure unique ID
+                    quantity: quantityForThisOven,
+                    oven: ovenName,
+                    elapsedTime: 0,
+                    isOvertime: false,
+                    startTime: new Date().toLocaleTimeString()
+                };
+                newBakingItems.push(newBakingItem);
+                remainingQuantityToBake -= quantityForThisOven;
+            }
         }
     }
 
-    if (assignedOven) {
-        const finalOvenName = assignedOven; // for closure
+    const totalQuantityPlaced = quantityToBake - remainingQuantityToBake;
 
+    if (totalQuantityPlaced > 0) {
         setItems(prev => {
-            const newBakingItem: BakeryItem = {
-                ...item,
-                id: Date.now() + Math.random(), // New unique ID for this batch
-                quantity: quantityToBake, // The quantity for this specific batch
-                oven: finalOvenName,
-                elapsedTime: 0,
-                isOvertime: false,
-                startTime: new Date().toLocaleTimeString()
-            };
-
             const updatedQueue = prev.queue.map(qItem => {
                 if (qItem.id === item.id) {
-                    return { ...qItem, quantity: qItem.quantity - quantityToBake };
+                    return { ...qItem, quantity: qItem.quantity - totalQuantityPlaced };
                 }
                 return qItem;
-            }).filter(qItem => qItem.quantity > 0); // Remove if quantity is 0 or less
+            }).filter(qItem => qItem.quantity > 0);
 
-            return { ...prev, queue: updatedQueue, baking: [...prev.baking, newBakingItem] };
+            return {
+                ...prev,
+                queue: updatedQueue,
+                baking: [...prev.baking, ...newBakingItems]
+            };
         });
 
-        setStartBakingInfo(null); // Success, close modal
+        if (remainingQuantityToBake > 0) {
+            alert(`Successfully started baking ${totalQuantityPlaced} trays. Could not place ${remainingQuantityToBake} trays as the target oven(s) are full.`);
+        }
     } else {
-        const groupName = preselectedOven ? preselectedOven : (item.ovenGroup || 'the target group');
-        alert(`No oven in ${groupName} has enough capacity for ${quantityToBake} trays.`);
+        const groupName = preselectedOven ? preselectedOven : (item.ovenGroup || item.oven || 'the target oven');
+        alert(`No available space in ${groupName} for this item.`);
     }
+
+    setStartBakingInfo(null); // Close modal
   };
 
   const startBaking = (id: number) => {
@@ -665,7 +677,7 @@ const App = () => {
             
             <button 
               onClick={() => setItems(prev => ({...prev, [category]: prev[category].filter(i => i.id !== item.id)}))} 
-              className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+              className={`p-2 ${category === 'queue' || category === 'completed' ? 'text-black' : 'text-slate-300'} hover:text-red-500 hover:bg-red-50 rounded-lg transition-all`}
               title={`Remove ${item.product}`}
               aria-label={`Remove ${item.product}`}
             >
@@ -758,7 +770,7 @@ const App = () => {
           <h2 className="text-orange-700 font-black flex items-center gap-2 mb-4 uppercase tracking-tighter"><Flame size={18}/> Baking ({items.baking.length})</h2>
           <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {/* 這裡完全維持你要求的高度與排列 */}
-            <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2 sm:gap-3 h-full">
+            <div className="grid grid-cols-1 landscape:grid-cols-4 gap-2 sm:gap-3 landscape:h-full">
               {OVENS.map((oven) => {
                 const ovenItems = items.baking.filter(i => i.oven === oven.name);
                 const currentLoad = ovenItems.reduce((sum, i) => sum + i.quantity, 0);
@@ -772,10 +784,10 @@ const App = () => {
                       const itemJSON = e.dataTransfer.getData('application/json');
                       if (itemJSON) handleDropOnOven(itemJSON, oven.name);
                     }}
-                    className={`bg-white/80 rounded-xl border-2 ${isFull ? 'border-red-400' : 'border-orange-200'} p-2 flex flex-col h-full min-h-0 relative overflow-hidden shadow-sm`}>
-                    <div className={`text-xs font-black uppercase mb-1 border-b-2 pb-1 flex justify-between items-center ${isFull ? 'text-red-600 border-red-100' : 'text-orange-800 border-orange-100'}`}>
+                    className={`bg-white/80 rounded-xl border-2 ${isFull ? 'border-amber-600' : 'border-orange-200'} p-2 flex flex-col landscape:h-full landscape:min-h-0 relative overflow-hidden shadow-sm`}>
+                    <div className={`text-xs font-black uppercase mb-1 border-b-2 pb-1 flex justify-between items-center ${isFull ? 'text-amber-800 border-amber-200' : 'text-orange-800 border-orange-100'}`}>
                       <span>{oven.name} {isFull && '(FULL)'}</span>
-                      <span className={`${isFull ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'} px-1.5 rounded-full`}>{currentLoad}/{oven.capacity}</span>
+                      <span className={`${isFull ? 'bg-amber-100 text-amber-800' : 'bg-orange-100 text-orange-600'} px-1.5 rounded-full`}>{currentLoad}/{oven.capacity}</span>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
                       {ovenItems.map(item => (
@@ -821,7 +833,7 @@ const App = () => {
       {/* 手機底部導航 */}
       <footer className="bg-white border-t p-2 sm:p-4">
         <div className="max-w-7xl mx-auto grid grid-cols-5 gap-1 sm:gap-2">
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv" />
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv" aria-label="Import CSV" />
           <button onClick={handleImportClick} title="Import CSV" className="py-2 rounded-lg font-bold flex flex-col items-center justify-center transition-all active:scale-95 bg-blue-600 text-white text-xs sm:text-sm">
             <Upload size={20}/> <span className="mt-1">Import</span>
           </button>
@@ -844,7 +856,7 @@ const App = () => {
 
       {/* Edit Master Modal */}
       {showEditMasterModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-100 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-2 sm:p-4 z-100 backdrop-blur-sm">
           <div className="bg-white rounded-3xl sm:rounded-4xl p-4 sm:p-6 w-full max-w-5xl h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200 shadow-2xl">
             <h2 className="text-2xl font-black mb-6 flex justify-between items-center text-slate-800 border-b pb-4">
               <span className="flex items-center gap-2"><Pencil className="text-orange-500"/> Edit Master List</span>
@@ -853,23 +865,37 @@ const App = () => {
               </button>
             </h2>
             
-            <div className="grid grid-cols-12 gap-2 sm:gap-4 px-2 sm:px-4 py-2 font-black text-slate-400 text-xs uppercase tracking-wider min-w-[600px]">
+            <div className="grid grid-cols-12 gap-2 sm:gap-4 px-2 sm:px-4 py-2 font-black text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider min-w-[600px]">
               <div className="col-span-4">Product Name</div>
               <div className="col-span-1 text-center">Trays</div>
-              <div className="col-span-2">Temp</div>
+              <div className="col-span-1 text-center">Top</div>
+              <div className="col-span-1 text-center">Bottom</div>
               <div className="col-span-2">Time (m)</div>
               <div className="col-span-2">Default Oven</div>
               <div className="col-span-1"></div>
             </div>
 
             <div className="flex-1 overflow-y-auto overflow-x-auto pr-2 -mr-2 custom-scrollbar space-y-2">
-              {editableQueue.map(item => (
+              {editableQueue.map(item => {
+                const [topTemp, bottomTemp = ''] = item.temp.split('/');
+                return (
                 <div key={item.id} className="bg-slate-50 hover:bg-white p-3 rounded-xl border border-slate-200 hover:border-blue-300 transition-all grid grid-cols-12 gap-2 sm:gap-4 items-center shadow-sm group min-w-[600px]">
-                  <input value={item.product} onChange={e => handleUpdateEditableItem(item.id, 'product', e.target.value)} className="col-span-4 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all" placeholder="Product Name" />
-                  <input type="number" value={item.quantity} onChange={e => handleUpdateEditableItem(item.id, 'quantity', parseInt(e.target.value) || 1)} className="col-span-1 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none text-center transition-all" placeholder="Qty" />
-                  <input value={item.temp} onChange={e => handleUpdateEditableItem(item.id, 'temp', e.target.value)} className="col-span-2 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all" placeholder="Temp" />
-                  <input type="number" value={item.totalTime} onChange={e => handleUpdateEditableItem(item.id, 'totalTime', parseFloat(e.target.value) || 10)} className="col-span-2 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all" placeholder="Time" />
-                  <select value={item.oven} onChange={e => handleUpdateEditableItem(item.id, 'oven', e.target.value)} className="col-span-2 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all text-sm">
+                  <input type="text" inputMode="text" value={item.product} onChange={e => handleUpdateEditableItem(item.id, 'product', e.target.value)} className="col-span-4 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all text-sm" placeholder="Product Name" />
+                  <input type="number" inputMode="numeric" value={item.quantity} onChange={e => handleUpdateEditableItem(item.id, 'quantity', parseInt(e.target.value) || 1)} className="col-span-1 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none text-center transition-all text-sm" placeholder="Qty" />
+                  <input type="text" inputMode="decimal" value={topTemp} onChange={e => {
+                      const newTop = e.target.value;
+                      const [, currentBottom = ''] = item.temp.split('/');
+                      const newTemp = currentBottom ? `${newTop}/${currentBottom}` : newTop;
+                      handleUpdateEditableItem(item.id, 'temp', newTemp);
+                  }} className="col-span-1 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all text-sm text-center" placeholder="Top" />
+                  <input type="text" inputMode="decimal" value={bottomTemp} onChange={e => {
+                      const newBottom = e.target.value;
+                      const [currentTop = ''] = item.temp.split('/');
+                      const newTemp = newBottom ? `${currentTop}/${newBottom}` : currentTop;
+                      handleUpdateEditableItem(item.id, 'temp', newTemp);
+                  }} className="col-span-1 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all text-sm text-center" placeholder="Bottom" />
+                  <input type="number" inputMode="decimal" value={item.totalTime} onChange={e => handleUpdateEditableItem(item.id, 'totalTime', parseFloat(e.target.value) || 10)} className="col-span-2 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all text-sm" placeholder="Time" />
+                  <select value={item.oven} onChange={e => handleUpdateEditableItem(item.id, 'oven', e.target.value)} className="col-span-2 p-2 rounded-lg border-transparent bg-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-bold text-slate-700 outline-none transition-all text-sm" aria-label="Default Oven">
                     <optgroup label="Groups">
                       <option value="Group A">Group A</option>
                       <option value="Group B">Group B</option>
@@ -880,12 +906,12 @@ const App = () => {
                     </optgroup>
                   </select>
                   <div className="col-span-1 flex justify-end">
-                    <button onClick={() => handleDeleteEditableItem(item.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                    <button onClick={() => handleDeleteEditableItem(item.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" aria-label="Delete Product">
                       <Trash2 size={18} />
                     </button>
                   </div>
                 </div>
-              ))}
+              )})}
               {editableQueue.length === 0 && (
                 <div className="text-center py-20 text-gray-300 flex flex-col items-center justify-center h-full">
                   <Box size={48} className="opacity-20 mb-2"/>
@@ -914,6 +940,7 @@ const App = () => {
                 value={customForm.oven} 
                 onChange={e => setCustomForm({...customForm, oven: e.target.value})} 
                 className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                aria-label="Select Oven"
               >
                 <option value="">Select Oven...</option>
                 {OVENS.map(o => <option key={o.name} value={o.name}>{o.name}</option>)}
@@ -1035,7 +1062,7 @@ const StartBakingModal = ({ item, targetOven, onConfirm, onClose }: { item: Bake
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-100">
-            <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 w-full max-w-md animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-4xl sm:rounded-[2.5rem] p-6 sm:p-8 w-full max-w-md animate-in fade-in zoom-in duration-200">
                 <h2 className="text-2xl font-black mb-2 text-slate-800">Start Baking</h2>
                 <p className="text-slate-600 font-bold text-lg mb-1">{item.product}</p>
                 <p className="text-sm text-slate-400 mb-6">
@@ -1052,7 +1079,7 @@ const StartBakingModal = ({ item, targetOven, onConfirm, onClose }: { item: Bake
                     <div className="grid grid-cols-3 gap-3 pt-2">
                         {numpadLayout.map(num => <button key={num} onClick={() => handleNumpadClick(num)} className="py-4 bg-slate-50 rounded-2xl font-black text-2xl text-slate-700 hover:bg-blue-100 hover:text-blue-600 transition-all active:scale-95">{num}</button>)}
                         <button onClick={() => handleNumpadClick(0)} className="py-4 bg-slate-50 rounded-2xl font-black text-2xl text-slate-700 hover:bg-blue-100 hover:text-blue-600 transition-all active:scale-95 col-start-2">0</button>
-                        <button onClick={handleBackspace} className="py-4 bg-slate-50 rounded-2xl font-black text-2xl text-slate-700 hover:bg-red-100 hover:text-red-600 transition-all active:scale-95 flex items-center justify-center"><Delete size={24} /></button>
+                        <button onClick={handleBackspace} className="py-4 bg-slate-50 rounded-2xl font-black text-2xl text-slate-700 hover:bg-red-100 hover:text-red-600 transition-all active:scale-95 flex items-center justify-center" aria-label="Backspace"><Delete size={24} /></button>
                     </div>
                     
                     <button onClick={handleConfirm} disabled={(parseInt(quantityStr, 10) || 0) <= 0} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black mt-4 hover:brightness-110 transition-all shadow-lg shadow-blue-200 disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed">
