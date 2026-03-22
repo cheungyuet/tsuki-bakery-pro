@@ -18,7 +18,7 @@ Tsuki QLD Bakery Pro is a high-performance web application designed for industri
 - **Persistence**: Browser LocalStorage for data integrity during network drops.
 
 ## 📦 Installation & Usage
-1. Clone the repository: `git clone [Your-Repo-URL]`
+1. Clone the repository: `git clone https://github.com/cheungyuet/tsuki-bakery-pro`
 2. Install dependencies: `npm install`
 3. Run development server: `npm run dev`
 4. Build for production: `npm run build`
