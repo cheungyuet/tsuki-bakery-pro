@@ -210,6 +210,4 @@ npm run build
 Copyright © 2026 Tsuki Ho. All Rights Reserved.  
 *Private proprietary software developed for portfolio demonstration.*
 
----
 **Built with ❤️ and 🥐 in Brisbane, Australia**
-```
